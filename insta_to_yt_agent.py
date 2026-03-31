@@ -11,7 +11,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Web Dashboard
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request as FastAPIRequest
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -103,7 +103,7 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: FastAPIRequest):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/status")
