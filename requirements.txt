@@ -6,3 +6,6 @@ yt-dlp
 python-dotenv
 ffmpeg-python
 openai
+fastapi
+uvicorn
+jinja2

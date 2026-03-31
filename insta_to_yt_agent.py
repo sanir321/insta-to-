@@ -6,8 +6,14 @@ import pickle
 import shutil
 import random
 import base64
+import threading
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Web Dashboard
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 # Google & YouTube API
 import google_auth_oauthlib.flow
@@ -43,29 +49,75 @@ KILO_API_KEY = os.getenv("KILO_API_KEY")
 KILO_BASE_URL = "https://api.kilo.ai/api/gateway/"
 KILO_MODEL = os.getenv("KILO_MODEL", "deepseek/deepseek-chat")
 
-# --- SECRETS DECODER (For Railway/Cloud) ---
+# --- SECRETS DECODER ---
 def setup_headless_secrets():
-    """Decodes Base64 secrets from environment variables and writes them to files."""
-    secret_b64 = os.getenv("GOOGLE_CLIENT_SECRET_B64")
-    token_b64 = os.getenv("YOUTUBE_TOKEN_B64")
-
-    if secret_b64 and not os.path.exists(CLIENT_SECRETS_FILE):
-        print("🔓 Decoding GOOGLE_CLIENT_SECRET_B64 from env...")
+    if not os.path.exists(CLIENT_SECRETS_FILE) and os.getenv("GOOGLE_CLIENT_SECRET_B64"):
+        print("🔓 Decoding Secret from env...")
         with open(CLIENT_SECRETS_FILE, "wb") as f:
-            f.write(base64.b64decode(secret_b64))
-
-    if token_b64 and not os.path.exists(TOKEN_PICKLE_FILE):
-        print("🔓 Decoding YOUTUBE_TOKEN_B64 from env...")
+            f.write(base64.b64decode(os.getenv("GOOGLE_CLIENT_SECRET_B64")))
+    if not os.path.exists(TOKEN_PICKLE_FILE) and os.getenv("YOUTUBE_TOKEN_B64"):
+        print("🔓 Decoding Token from env...")
         with open(TOKEN_PICKLE_FILE, "wb") as f:
-            f.write(base64.b64decode(token_b64))
+            f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64")))
 
 # Prepare folders
 for folder in [DOWNLOAD_DIR, COMPLETED_DIR]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
 
-# Decode secrets if running on cloud
 setup_headless_secrets()
+
+# --- STATUS MANAGER (Dashboard Backend) ---
+class StatusManager:
+    def __init__(self):
+        self.current_action = "Initializing..."
+        self.total_uploads = 0
+        self.last_upload_time = "Never"
+        self.active_url = "None"
+        self.progress = 0
+        self.step_name = "Ready"
+        self.is_running = False
+        self.logs = []
+
+    def update(self, action=None, progress=None, step=None, url=None):
+        if action: self.current_action = action
+        if progress is not None: self.progress = progress
+        if step: self.step_name = step
+        if url: self.active_url = url
+        if action or step: self.log(f"{step or action}")
+
+    def log(self, message):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_msg = f"[{timestamp}] {message}"
+        print(formatted_msg)
+        self.logs.append(formatted_msg)
+        if len(self.logs) > 15: self.logs.pop(0)
+
+    def mark_upload(self):
+        self.total_uploads += 1
+        self.last_upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+status = StatusManager()
+
+# --- WEB DASHBOARD SETUP ---
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/status")
+async def get_status():
+    return {
+        "current_action": status.current_action,
+        "total_uploads": status.total_uploads,
+        "last_upload_time": status.last_upload_time,
+        "active_url": status.active_url,
+        "progress": status.progress,
+        "step_name": status.step_name,
+        "is_running": status.is_running,
+        "logs": status.logs
+    }
 
 # --- AI CAPTION GENERATOR ---
 def generate_ai_metadata(original_title, original_description):
@@ -212,29 +264,30 @@ def save_completed_url(url):
     with open(COMPLETED_URLS_FILE, 'a') as f:
         f.write(url + "\n")
 
-# --- MAIN EXECUTION ---
-def main():
-    parser = argparse.ArgumentParser(description="Instagram Reel to YouTube Shorts Agent (PRO)")
-    parser.add_argument("--file", default="reel_urls.txt", help="Path to Reel URLs")
-    parser.add_argument("--daily", action="store_true", help="Post daily logic")
-    parser.add_argument("--limit", type=int, default=1, help="Number of videos per run")
-    parser.add_argument("--privacy", default="unlisted", choices=["public", "private", "unlisted"], help="Upload visibility (default: unlisted)")
+# --- MAIN AUTOMATION LOOP ---
+def run_automation_loop(args):
+    status.is_running = True
+    status.log("🚀 Automation Loop Started")
     
-    args = parser.parse_args()
-
     if not os.path.exists(CLIENT_SECRETS_FILE):
-        print(f"❌ Error: {CLIENT_SECRETS_FILE} missing.")
+        status.log(f"❌ Error: {CLIENT_SECRETS_FILE} missing.")
         return
 
-    youtube = get_authenticated_service()
-    
+    try:
+        status.update(action="Authenticating", progress=5, step="Google Auth")
+        youtube = get_authenticated_service()
+    except Exception as e:
+        status.log(f"❌ Auth Failed: {e}")
+        return
+
     while True:
+        status.update(action="Checking URLs", progress=10, step="Scanning File")
         completed_urls = load_completed_urls()
         
         if not os.path.exists(args.file):
-            print(f"Waiting for {args.file}...")
+            status.update(action="Waiting for file", progress=0, step="Idle")
             if not args.daily: break
-            time.sleep(3600)
+            time.sleep(60)
             continue
 
         with open(args.file, 'r') as f:
@@ -243,47 +296,72 @@ def main():
         new_urls = [u for u in all_urls if u not in completed_urls]
         
         if not new_urls:
-            print("📭 No new URLs. Waiting...")
+            status.update(action="No new URLs", progress=0, step="Idle")
             if not args.daily: break
+            status.update(action="Sleeping", step="Waiting for 1 hour")
             time.sleep(3600)
             continue
 
         batch = new_urls[:(1 if args.daily else args.limit)]
 
         for url in batch:
-            print(f"\n🚀 Processing: {url}")
+            status.update(action="Processing", progress=20, step="Starting", url=url)
             try:
                 # 1. Download
+                status.update(progress=30, step="Downloading from Instagram")
                 raw_path, raw_title, raw_desc = download_reel(url)
                 if not raw_path: continue
                 
                 # 2. Process (FFmpeg)
+                status.update(progress=50, step="Scaling & Re-encoding (FFmpeg)")
                 processed_path = process_video(raw_path)
                 
                 # 3. AI Metadata
+                status.update(progress=70, step="Generating Viral AI Captions")
                 final_title, final_desc = generate_ai_metadata(raw_title, raw_desc)
                 
                 # 4. Upload
+                status.update(progress=85, step="Uploading to YouTube Shorts")
                 upload_to_youtube(youtube, processed_path, final_title, final_desc, args.privacy)
                 
                 # 5. Save State & Cleanup
+                status.mark_upload()
                 save_completed_url(url)
                 
-                if os.path.exists(processed_path):
-                    os.remove(processed_path)
-                if os.path.exists(raw_path):
-                    os.remove(raw_path)
+                if os.path.exists(processed_path): os.remove(processed_path)
+                if os.path.exists(raw_path): os.remove(raw_path)
                 
-                print(f"✅ Successfully finished {url} and cleaned up files.")
+                status.update(action="Finished", progress=100, step=f"Successfully posted!")
+                status.log(f"✅ Posted: {final_title}")
 
             except Exception as e:
-                print(f"❌ Error: {e}")
+                status.log(f"❌ Error during processing: {e}")
 
         if not args.daily:
             break
         
-        print("\n😴 Sleeping for 24 hours...")
+        status.update(action="Sleeping", progress=0, step="Waiting for 24h")
+        status.log("😴 Cycle complete. See you in 24 hours.")
         time.sleep(24 * 3600)
+
+def main():
+    parser = argparse.ArgumentParser(description="Instagram Reel to YouTube Shorts Agent (DASHBOARD MODE)")
+    parser.add_argument("--file", default="reel_urls.txt", help="Path to Reel URLs")
+    parser.add_argument("--daily", action="store_true", help="Post daily logic")
+    parser.add_argument("--limit", type=int, default=1, help="Number of videos per run")
+    parser.add_argument("--privacy", default="unlisted", choices=["public", "private", "unlisted"], help="Upload visibility")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    
+    args = parser.parse_args()
+
+    # Start the automation loop in a background thread
+    bot_thread = threading.Thread(target=run_automation_loop, args=(args,), daemon=True)
+    bot_thread.start()
+
+    # Start the FastAPI web server
+    import uvicorn
+    status.log(f"🌐 Dashboard available on port {args.port}")
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 if __name__ == "__main__":
     main()
