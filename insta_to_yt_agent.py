@@ -5,6 +5,7 @@ import argparse
 import pickle
 import shutil
 import random
+import base64
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -42,9 +43,29 @@ KILO_API_KEY = os.getenv("KILO_API_KEY")
 KILO_BASE_URL = "https://api.kilo.ai/api/gateway/"
 KILO_MODEL = os.getenv("KILO_MODEL", "deepseek/deepseek-chat")
 
+# --- SECRETS DECODER (For Railway/Cloud) ---
+def setup_headless_secrets():
+    """Decodes Base64 secrets from environment variables and writes them to files."""
+    secret_b64 = os.getenv("GOOGLE_CLIENT_SECRET_B64")
+    token_b64 = os.getenv("YOUTUBE_TOKEN_B64")
+
+    if secret_b64 and not os.path.exists(CLIENT_SECRETS_FILE):
+        print("🔓 Decoding GOOGLE_CLIENT_SECRET_B64 from env...")
+        with open(CLIENT_SECRETS_FILE, "wb") as f:
+            f.write(base64.b64decode(secret_b64))
+
+    if token_b64 and not os.path.exists(TOKEN_PICKLE_FILE):
+        print("🔓 Decoding YOUTUBE_TOKEN_B64 from env...")
+        with open(TOKEN_PICKLE_FILE, "wb") as f:
+            f.write(base64.b64decode(token_b64))
+
+# Prepare folders
 for folder in [DOWNLOAD_DIR, COMPLETED_DIR]:
     if not os.path.exists(folder):
         os.makedirs(folder)
+
+# Decode secrets if running on cloud
+setup_headless_secrets()
 
 # --- AI CAPTION GENERATOR ---
 def generate_ai_metadata(original_title, original_description):
