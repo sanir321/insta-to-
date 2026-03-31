@@ -1,0 +1,9 @@
+instaloader
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+yt-dlp
+python-dotenv
+ffmpeg-python
+openai
+shutil

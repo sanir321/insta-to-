@@ -1,0 +1,10 @@
+downloads/
+completed/
+.env
+youtube_token.pickle
+completed_reels.txt
+__pycache__/
+*.pyc
+.git/
+.gitignore
+test_kilo.py
