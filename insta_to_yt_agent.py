@@ -104,7 +104,15 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: FastAPIRequest):
-    return templates.TemplateResponse("index.html", {"request": request})
+    try:
+        return templates.TemplateResponse("index.html", {"request": request})
+    except Exception as e:
+        status.log(f"⚠️ Template error: {e}")
+        return HTMLResponse(content=f"<h1>Dashboard is Live</h1><p>But template failed: {e}</p><p>Status: {status.current_action}</p>")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "bot_running": status.is_running}
 
 @app.get("/status")
 async def get_status():
@@ -354,14 +362,20 @@ def main():
     
     args = parser.parse_args()
 
+    # Define a delayed starter for the bot
+    def delayed_start():
+        status.log("⏳ Waiting 10s for web server to stabilize...")
+        time.sleep(10)
+        run_automation_loop(args)
+
     # Start the automation loop in a background thread
-    bot_thread = threading.Thread(target=run_automation_loop, args=(args,), daemon=True)
+    bot_thread = threading.Thread(target=delayed_start, daemon=True)
     bot_thread.start()
 
     # Start the FastAPI web server
     import uvicorn
     status.log(f"🌐 Dashboard available on port {args.port}")
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="info")
 
 if __name__ == "__main__":
     main()
