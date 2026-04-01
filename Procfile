@@ -1,1 +1,1 @@
-web: python insta_to_yt_agent.py --daily
+web: python main.py --daily

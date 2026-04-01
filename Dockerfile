@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run as a worker in daily mode by default
-CMD ["python", "insta_to_yt_agent.py", "--daily"]
+CMD ["python", "main.py", "--daily"]

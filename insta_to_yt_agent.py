@@ -374,7 +374,9 @@ def main():
 
     # Start the FastAPI web server
     import uvicorn
-    status.log(f"🌐 Dashboard available on port {args.port}")
+    status.log(f"🚀 Dashboard is active on port {args.port}")
+    status.log("👉 ACCESS PUBLICLY AT: [Your-Railway-Domain-URL]")
+    status.log("   (Find your domain in the 'Networking' section of Railway)")
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="info")
 
 if __name__ == "__main__":
