@@ -25,6 +25,7 @@ CLIENT_SECRETS_FILE = "client_secret.json"
 TOKEN_PICKLE_FILE = os.path.join(DATA_DIR, "youtube_token.pickle")
 COMPLETED_URLS_FILE = os.path.join(DATA_DIR, "completed_reels.txt")
 DOWNLOAD_DIR = os.path.join(DATA_DIR, "downloads")
+COOKIES_FILE = os.path.join(DATA_DIR, "cookies.txt")
 
 for folder in [DOWNLOAD_DIR]:
     os.makedirs(folder, exist_ok=True)
@@ -39,6 +40,10 @@ def setup_headless_secrets():
         status_manager.log("🔓 Decoding Token from env...")
         with open(TOKEN_PICKLE_FILE, "wb") as f:
             f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64")))
+    if os.getenv("INSTAGRAM_COOKIES_B64"):
+        status_manager.log("🍪 Decoding Instagram Cookies from env...")
+        with open(COOKIES_FILE, "wb") as f:
+            f.write(base64.b64decode(os.getenv("INSTAGRAM_COOKIES_B64")))
 
 setup_headless_secrets()
 
@@ -71,7 +76,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize Services
-    downloader = Downloader(DOWNLOAD_DIR)
+    downloader = Downloader(DOWNLOAD_DIR, COOKIES_FILE if os.path.exists(COOKIES_FILE) else None)
     processor = VideoProcessor()
     ai_agent = AIAgent(os.getenv("KILO_API_KEY"), os.getenv("KILO_MODEL", "deepseek/deepseek-chat"))
     youtube_service = YouTubeService(

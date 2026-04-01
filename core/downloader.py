@@ -3,8 +3,9 @@ import yt_dlp
 from core.status import status_manager
 
 class Downloader:
-    def __init__(self, download_dir):
+    def __init__(self, download_dir, cookiefile=None):
         self.download_dir = download_dir
+        self.cookiefile = cookiefile
 
     def download_reel(self, url):
         status_manager.update(action="Downloading", progress=30, step="Downloading from Instagram", url=url)
@@ -13,6 +14,7 @@ class Downloader:
             'outtmpl': os.path.join(self.download_dir, '%(id)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
+            'cookiefile': self.cookiefile if self.cookiefile else None
         }
         
         try:
