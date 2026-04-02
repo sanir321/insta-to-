@@ -23,6 +23,7 @@ load_dotenv()
 DATA_DIR = "/app/data" if os.path.exists("/app/data") else "."
 CLIENT_SECRETS_FILE = "client_secret.json"
 TOKEN_PICKLE_FILE = os.path.join(DATA_DIR, "youtube_token.pickle")
+TOKEN_PICKLE_FILE_CH2 = os.path.join(DATA_DIR, "youtube_token_channel2.pickle")
 COMPLETED_URLS_FILE = os.path.join(DATA_DIR, "completed_reels.txt")
 DOWNLOAD_DIR = os.path.join(DATA_DIR, "downloads")
 COOKIES_FILE = os.path.join(DATA_DIR, "cookies.txt")
@@ -37,9 +38,13 @@ def setup_headless_secrets():
         with open(CLIENT_SECRETS_FILE, "wb") as f:
             f.write(base64.b64decode(os.getenv("GOOGLE_CLIENT_SECRET_B64")))
     if not os.path.exists(TOKEN_PICKLE_FILE) and os.getenv("YOUTUBE_TOKEN_B64"):
-        status_manager.log("🔓 Decoding Token from env...")
+        status_manager.log("🔓 Decoding Token (Channel 1) from env...")
         with open(TOKEN_PICKLE_FILE, "wb") as f:
             f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64")))
+    if not os.path.exists(TOKEN_PICKLE_FILE_CH2) and os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2"):
+        status_manager.log("🔓 Decoding Token (Channel 2) from env...")
+        with open(TOKEN_PICKLE_FILE_CH2, "wb") as f:
+            f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2")))
     if os.getenv("INSTAGRAM_COOKIES_B64"):
         status_manager.log("🍪 Decoding Instagram Cookies from env...")
         with open(COOKIES_FILE, "wb") as f:
@@ -79,11 +84,26 @@ def main():
     downloader = Downloader(DOWNLOAD_DIR, COOKIES_FILE if os.path.exists(COOKIES_FILE) else None)
     processor = VideoProcessor()
     ai_agent = AIAgent(os.getenv("KILO_API_KEY"), os.getenv("KILO_MODEL", "deepseek/deepseek-chat"))
+
+    YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
     youtube_service = YouTubeService(
-        CLIENT_SECRETS_FILE, 
-        TOKEN_PICKLE_FILE, 
-        ["https://www.googleapis.com/auth/youtube.upload"]
+        CLIENT_SECRETS_FILE,
+        YT_SCOPES,
+        token_pickle_file=TOKEN_PICKLE_FILE,
     )
+
+    # Channel 2 is optional — only initialised when its token env var is present.
+    youtube_service_ch2 = None
+    if os.path.exists(TOKEN_PICKLE_FILE_CH2):
+        status_manager.log("📺 Channel 2 token found — dual-channel mode enabled")
+        youtube_service_ch2 = YouTubeService(
+            CLIENT_SECRETS_FILE,
+            YT_SCOPES,
+            token_pickle_file=TOKEN_PICKLE_FILE_CH2,
+        )
+    else:
+        status_manager.log("ℹ️ No Channel 2 token — running in single-channel mode")
 
     config = {
         'urls_file': args.file,
@@ -94,7 +114,10 @@ def main():
         'privacy': args.privacy
     }
 
-    workflow = AutomationWorkflow(downloader, processor, ai_agent, youtube_service, config)
+    workflow = AutomationWorkflow(
+        downloader, processor, ai_agent, youtube_service, config,
+        youtube_service_ch2=youtube_service_ch2,
+    )
 
     # Start Workflow in Background
     def start_workflow():
