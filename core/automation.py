@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from core.status import status_manager
 
@@ -53,7 +54,14 @@ class AutomationWorkflow:
                 time.sleep(3600)
                 continue
 
-            batch = new_urls[:(1 if self.config['daily'] else self.config['limit'])]
+            if self.config['daily']:
+                # Randomly select 1 URL from new URLs
+                batch = [random.choice(new_urls)] if new_urls else []
+                if batch:
+                    remaining = len(new_urls) - 1
+                    status_manager.log(f"🎲 Selected random URL: {batch[0]} ({remaining} URLs remaining)")
+            else:
+                batch = new_urls[:self.config['limit']]
 
             for url in batch:
                 try:
@@ -79,6 +87,9 @@ class AutomationWorkflow:
                     
                     status_manager.update(action="Idle", progress=100, step=f"Successfully posted!")
                     status_manager.log(f"✅ Posted: {final_title}")
+
+                    if self.config['daily']:
+                        break  # Only process 1 video per daily cycle
 
                 except Exception as e:
                     status_manager.log(f"❌ Automation Error: {e}")
