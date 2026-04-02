@@ -26,9 +26,10 @@ class YouTubeService:
                 credentials.refresh(GoogleRequest())
             else:
                 if os.environ.get("RAILWAY_PROJECT_ID") or os.environ.get("HEADLESS"):
-                    status_manager.log("❌ ERROR: No YouTube token found and cannot open browser in headless environment.")
-                    status_manager.log("👉 Please provide 'YOUTUBE_TOKEN_B64' in your Railway project variables.")
-                    raise Exception("Missing YOUTUBE_TOKEN_B64 in headless environment.")
+                    file_name = os.path.basename(self.token_pickle_file)
+                    status_manager.log(f"❌ ERROR: Token file '{file_name}' is missing or invalid.")
+                    status_manager.log(f"👉 Ensure the corresponding Base64 environment variable is correctly set in Railway.")
+                    raise Exception(f"Missing or invalid YouTube token: {file_name}")
                 
                 status_manager.log("🌐 Opening browser for YouTube authentication...")
                 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(

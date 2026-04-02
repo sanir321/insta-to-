@@ -33,18 +33,36 @@ for folder in [DOWNLOAD_DIR]:
 
 # --- SECRETS DECODER ---
 def setup_headless_secrets():
-    if not os.path.exists(CLIENT_SECRETS_FILE) and os.getenv("GOOGLE_CLIENT_SECRET_B64"):
-        status_manager.log("🔓 Decoding Secret from env...")
-        with open(CLIENT_SECRETS_FILE, "wb") as f:
-            f.write(base64.b64decode(os.getenv("GOOGLE_CLIENT_SECRET_B64")))
-    if not os.path.exists(TOKEN_PICKLE_FILE) and os.getenv("YOUTUBE_TOKEN_B64"):
-        status_manager.log("🔓 Decoding Token (Channel 1) from env...")
-        with open(TOKEN_PICKLE_FILE, "wb") as f:
-            f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64")))
-    if not os.path.exists(TOKEN_PICKLE_FILE_CH2) and os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2"):
-        status_manager.log("🔓 Decoding Token (Channel 2) from env...")
-        with open(TOKEN_PICKLE_FILE_CH2, "wb") as f:
-            f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2")))
+    # 1. Google Client Secret
+    if os.getenv("GOOGLE_CLIENT_SECRET_B64"):
+        if not os.path.exists(CLIENT_SECRETS_FILE):
+            status_manager.log("🔓 Decoding Secret from env...")
+            with open(CLIENT_SECRETS_FILE, "wb") as f:
+                f.write(base64.b64decode(os.getenv("GOOGLE_CLIENT_SECRET_B64")))
+        else:
+            status_manager.log("ℹ️ Client Secret file exists — skipping decoding.")
+
+    # 2. YouTube Token (Channel 1)
+    if os.getenv("YOUTUBE_TOKEN_B64"):
+        status_manager.log("🔓 Detection check: YOUTUBE_TOKEN_B64 found.")
+        if not os.path.exists(TOKEN_PICKLE_FILE):
+            status_manager.log("🔓 Decoding Token (Channel 1) from env...")
+            with open(TOKEN_PICKLE_FILE, "wb") as f:
+                f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64")))
+    else:
+        status_manager.log("⚠️ YOUTUBE_TOKEN_B64 not found in environment.")
+
+    # 3. YouTube Token (Channel 2)
+    if os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2"):
+        status_manager.log("🔓 Detection check: YOUTUBE_TOKEN_B64_CHANNEL2 found.")
+        if not os.path.exists(TOKEN_PICKLE_FILE_CH2):
+            status_manager.log("🔓 Decoding Token (Channel 2) from env...")
+            with open(TOKEN_PICKLE_FILE_CH2, "wb") as f:
+                f.write(base64.b64decode(os.getenv("YOUTUBE_TOKEN_B64_CHANNEL2")))
+    else:
+        status_manager.log("ℹ️ YOUTUBE_TOKEN_B64_CHANNEL2 not found in environment — channel 2 service will be disabled.")
+
+    # 4. Instagram Cookies
     if os.getenv("INSTAGRAM_COOKIES_B64"):
         status_manager.log("🍪 Decoding Instagram Cookies from env...")
         with open(COOKIES_FILE, "wb") as f:
