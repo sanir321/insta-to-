@@ -2,8 +2,8 @@
 .env
 
 # Google API/OAuth
-client_secret.json
-youtube_token.pickle
+client_secret*.json
+youtube_token*.pickle
 
 # Data files
 completed_reels.txt
