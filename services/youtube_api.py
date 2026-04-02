@@ -8,9 +8,9 @@ from google.auth.transport.requests import Request as GoogleRequest
 from core.status import status_manager
 
 class YouTubeService:
-    def __init__(self, client_secrets_file, token_pickle_file, scopes):
+    def __init__(self, client_secrets_file, scopes, token_pickle_file=None):
         self.client_secrets_file = client_secrets_file
-        self.token_pickle_file = token_pickle_file
+        self.token_pickle_file = token_pickle_file or "youtube_token.pickle"
         self.scopes = scopes
         self.service = None
 
