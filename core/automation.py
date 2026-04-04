@@ -224,7 +224,9 @@ class AutomationWorkflow:
             # Scheduling for next run (daily mode only)
             import pytz
             from datetime import datetime, timedelta
-            
+
+            POLL_INTERVAL = 300  # seconds — wake up every 5 minutes to check
+
             # Use TIMEZONE from env or default to UTC
             tz_str = os.getenv("TIMEZONE", "UTC")
             try:
@@ -232,18 +234,45 @@ class AutomationWorkflow:
             except Exception:
                 timezone = pytz.utc
                 status_manager.log(f"⚠️ Invalid TIMEZONE '{tz_str}', defaulting to UTC")
-            
+
             now = datetime.now(timezone)
             target_time_str = self.config.get('post_time', '02:00')
             target_h, target_m = map(int, target_time_str.split(':'))
-            
+
             target = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
             if target <= now:
                 target += timedelta(days=1)
-            
-            wait_seconds = (target - now).total_seconds()
-            hours_wait = wait_seconds / 3600
-            
-            status_manager.update(action="Sleeping", progress=0, step=f"Next post at {target.strftime('%H:%M')} ({tz_str})")
-            status_manager.log(f"😴 Cycle complete. See you at {target.strftime('%Y-%m-%d %H:%M:%S %Z')} ({hours_wait:.1f} hours away)")
-            time.sleep(wait_seconds)
+
+            hours_wait = (target - now).total_seconds() / 3600
+            status_manager.update(
+                action="Sleeping", progress=0,
+                step=f"Next post at {target.strftime('%H:%M')} ({tz_str})"
+            )
+            status_manager.log(
+                f"😴 Cycle complete. Next post scheduled for "
+                f"{target.strftime('%Y-%m-%d %H:%M:%S %Z')} "
+                f"({hours_wait:.1f} hours away). "
+                f"Polling every {POLL_INTERVAL // 60} min."
+            )
+
+            # Poll in short intervals so we never miss the target time
+            # even after a restart or clock drift.
+            while True:
+                now = datetime.now(timezone)
+                remaining = (target - now).total_seconds()
+
+                if remaining <= 0:
+                    status_manager.log(
+                        f"⏰ Wake-up check at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}: "
+                        f"target reached — starting next cycle."
+                    )
+                    break
+
+                # Log a status update on each poll so the dashboard stays fresh.
+                mins_remaining = int(remaining // 60)
+                status_manager.log(
+                    f"⏳ [{now.strftime('%H:%M:%S %Z')}] Next post in "
+                    f"{mins_remaining} min "
+                    f"(at {target.strftime('%H:%M:%S %Z')})"
+                )
+                time.sleep(min(POLL_INTERVAL, remaining))
